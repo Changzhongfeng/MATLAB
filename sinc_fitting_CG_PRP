@@ -1,0 +1,98 @@
+function [WD, WS, ERR, ERR_unit] = sinc_fitting_CG_PRP(X,Y)
+X = X.*pi/180;
+theta = [1*pi*rand;5*rand+5];
+angle_270 = 1.5*pi;
+H_vad = @(theta,X) theta(2).*sin(X+angle_270-theta(1));
+J_vad = @(H,Y) sum((H - Y).^2) / (2 * length(Y));
+grad1_vad = @(X,Y,H,theta) (mean((H-Y).*theta(2).*cos(X+angle_270-theta(1)).*-1));
+grad2_vad = @(X,Y,H,theta) (mean((H-Y).*sin(X+angle_270-theta(1))));
+grad11_vad = @(X,Y,H,theta) mean(theta(2)^2.*((cos(X+angle_270-theta(1))).^2-(sin(X+angle_270-theta(1))).^2)+Y.*theta(2).*sin(X+angle_270-theta(1)));
+grad12_vad = @(X,Y,H,theta) mean((-2.*theta(2).*sin(X+angle_270-theta(1))+Y).*cos(X+angle_270-theta(1)));
+grad22_vad = @(X,Y,H,theta) mean((sin(X+angle_270-theta(1))).^2);
+x_y_r = @(x,y) sqrt(x.^2+y.^2);
+n_ite = 100;
+theta_inital = zeros(2,n_ite);
+theta_end = zeros(2,n_ite);
+ERR_ini = zeros(1,n_ite);
+theta = [2*pi*rand;20*rand+1];
+H1 = H_vad(theta,X);
+g1 = [grad1_vad(X,Y,H1,theta);grad2_vad(X,Y,H1,theta)];
+d1 = -g1;
+G1= [[grad11_vad(X,Y,H1,theta),grad12_vad(X,Y,H1,theta)];[grad12_vad(X,Y,H1,theta),grad22_vad(X,Y,H1,theta)]];
+J1 = J_vad(H1,Y);
+alpha1 = (-g1'*d1)/(d1'*G1*d1);
+theta = theta + alpha1.*d1;
+%%
+stepp = [1,1];
+threshold = [0.01*pi/180*1;0.001];
+
+threshold_g = 1e-5;
+g2 = g1;
+G2 = [1 0; 0 0.5];
+count_all = 0;
+
+    if x_y_r(g1(1),g1(2))<threshold_g
+
+    else
+        icount = 1;
+        flag = 1;
+        while flag    
+            while ~(x_y_r(stepp(1),stepp(2))<threshold_g && sqrt(g2(2)^2+g2(1)^2)<threshold_g)
+                H2 = H_vad(theta,X);
+                g2 = [grad1_vad(X,Y,H2,theta);grad2_vad(X,Y,H2,theta)];
+                J2 = J_vad(H2,Y);
+                y1 = g2-g1;
+                beita2 = (g2'*(g2-g1))/(g1(1)^2+g1(2)^2);
+                d2 = -g2+beita2*d1;
+                G2= [[grad11_vad(X,Y,H1,theta),grad12_vad(X,Y,H1,theta)];[grad12_vad(X,Y,H1,theta),grad22_vad(X,Y,H1,theta)]];       
+                alpha2 = (-g2'*d2)/(d2'*G2*d2);
+                stepp = alpha2.*d2;
+                theta = theta + stepp;       
+                g1 = g2;
+                d1 = d2;
+                H1 = H2;
+                J1 = J2;
+                G1 = G2;
+                J2(icount) = J_vad(H2,Y);
+                icount = icount + 1;
+                count_all = count_all + 1;
+                if icount>=200
+                    theta = [2*pi*rand;20*rand+1];
+                    H1 = H_vad(theta,X);
+                    g1 = [grad1_vad(X,Y,H1,theta);grad2_vad(X,Y,H1,theta)];
+                    d1 = -g1;
+                    G1= [[grad11_vad(X,Y,H1,theta),grad12_vad(X,Y,H1,theta)];[grad12_vad(X,Y,H1,theta),grad22_vad(X,Y,H1,theta)]];
+                    J1 = J_vad(H1,Y);
+                    alpha1 = (-g1'*d1)/(d1'*G1*d1);
+                    theta = theta + alpha1.*d1;                    
+                    stepp = [1,1]; 
+                    icount = 1;
+                end                   
+            end 
+            r =eig(G2);
+            if r(1)>0 && r(2)>0 
+                flag = 0;
+            else
+                theta = [2*pi*rand;20*rand+1];
+                H1 = H_vad(theta,X);
+                g1 = [grad1_vad(X,Y,H1,theta);grad2_vad(X,Y,H1,theta)];
+                d1 = -g1;
+                G1= [[grad11_vad(X,Y,H1,theta),grad12_vad(X,Y,H1,theta)];[grad12_vad(X,Y,H1,theta),grad22_vad(X,Y,H1,theta)]];
+                J1 = J_vad(H1,Y);
+                alpha1 = (-g1'*d1)/(d1'*G1*d1);
+                theta = theta + alpha1.*d1;                    
+                stepp = [1,1]; 
+                icount = 1;
+            end
+        end
+
+            theta(1) = mod(theta(1),2*pi);
+            WS = theta(2);
+            WD = theta(1).*180./pi;
+            WD(WS<0) = WD(WS<0) + 180;
+            WS = abs(WS);
+            ERR_unit= (WS.*sin((X+270*pi/180-WD*pi/180))-Y).^2;
+            ERR = mean((WS.*sin((X+270*pi/180-WD*pi/180))-Y).^2); 
+            
+    end 
+end
